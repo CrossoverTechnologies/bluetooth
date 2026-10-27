@@ -105,7 +105,7 @@ func (a *Adapter) Reset() error {
 		_ = a.StopScan()
 	}
 
-	// Unblock goroutines parked in Connect — closing the chan
+	// Unblock goroutines parked in Connect. Closing the chan
 	// makes Connect return an error.
 	a.connectMap.Range(func(key, value any) bool {
 		a.connectMap.Delete(key)
@@ -176,8 +176,13 @@ func (cmd *centralManagerDelegate) DidDisconnectPeripheral(cmgr cbgo.CentralMana
 	cmd.a.connectHandler(Device{Address: addr}, false)
 
 	// like with DidConnectPeripheral, check if we have a chan allocated for this and send through the peripheral
-	// this will only be true if the receiving side is still waiting for a connection to complete
+	// this will only be true if the receiving side is still waiting for a connection to complete.
+	// A disconnect is never a successful connect, even when CoreBluetooth gives no error
+	// (for example the disconnect of a previous connection to the same peripheral).
 	if ch, ok := cmd.a.connectMap.LoadAndDelete(id); ok {
+		if err == nil {
+			err = errors.New("Connect failed: peripheral disconnected")
+		}
 		ch.(chan connectResult) <- connectResult{prph: prph, err: err}
 	}
 }
@@ -203,6 +208,9 @@ func (cmd *centralManagerDelegate) DidFailToConnectPeripheral(cmgr cbgo.CentralM
 	id := prph.Identifier().String()
 
 	if ch, ok := cmd.a.connectMap.LoadAndDelete(id); ok {
+		if err == nil {
+			err = errors.New("Connect failed")
+		}
 		ch.(chan connectResult) <- connectResult{prph: prph, err: err}
 	}
 }

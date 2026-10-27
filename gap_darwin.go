@@ -144,6 +144,10 @@ func (a *Adapter) Connect(address Address, params ConnectionParams) (Device, err
 				if connectionError != nil {
 					return Device{}, connectionError
 				}
+				// The connection attempt may still be pending in CoreBluetooth,
+				// for example when the disconnect of a previous connection got here
+				// first. Cancel it so it does not leave a link that no Device owns.
+				a.cm.CancelConnect(prphs[0])
 				if res.err != nil {
 					return Device{}, res.err
 				}
