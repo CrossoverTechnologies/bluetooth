@@ -285,3 +285,54 @@ func TestMalformedAdvertisementPayload(t *testing.T) {
 		}
 	})
 }
+
+func TestParseServiceData(t *testing.T) {
+	deviceUUID := []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+	tests := []struct {
+		name      string
+		fieldType byte
+		field     []byte
+		want      ServiceDataElement
+		ok        bool
+	}{
+		{
+			name:      "16-bit UUID with a Mesh Provisioning Service device UUID and OOB",
+			fieldType: 0x16,
+			field:     append(append([]byte{0x27, 0x18}, deviceUUID...), 0x00, 0x00),
+			want:      ServiceDataElement{UUID: New16BitUUID(0x1827), Data: append(append([]byte{}, deviceUUID...), 0x00, 0x00)},
+			ok:        true,
+		},
+		{
+			name:      "16-bit UUID without data",
+			fieldType: 0x16,
+			field:     []byte{0xd2, 0xfc},
+			want:      ServiceDataElement{UUID: New16BitUUID(0xfcd2), Data: []byte{}},
+			ok:        true,
+		},
+		{
+			name:      "32-bit UUID",
+			fieldType: 0x20,
+			field:     []byte{0x78, 0x56, 0x34, 0x12, 0x01},
+			want:      ServiceDataElement{UUID: New32BitUUID(0x12345678), Data: []byte{0x01}},
+			ok:        true,
+		},
+		{
+			name:      "16-bit UUID truncated",
+			fieldType: 0x16,
+			field:     []byte{0x27},
+		},
+		{
+			name:      "manufacturer data",
+			fieldType: 0xff,
+			field:     []byte{0x4c, 0x00, 0x01},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseServiceData(tc.fieldType, tc.field)
+			if ok != tc.ok || !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("got %v, %v, want %v, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
