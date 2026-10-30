@@ -322,6 +322,10 @@ func TestParseServiceData(t *testing.T) {
 			field:     []byte{0x27},
 		},
 		{
+			name:      "16-bit UUID without a field",
+			fieldType: 0x16,
+		},
+		{
 			name:      "manufacturer data",
 			fieldType: 0xff,
 			field:     []byte{0x4c, 0x00, 0x01},
