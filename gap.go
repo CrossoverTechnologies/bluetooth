@@ -403,36 +403,45 @@ func (buf *rawAdvertisementPayload) ServiceData() []ServiceDataElement {
 		}
 		data = rest
 
-		switch fieldType {
-		case 0x16: // 16-bit uuid
-			if len(field) < 2 {
-				continue
-			}
-			serviceData = append(serviceData, ServiceDataElement{
-				UUID: New16BitUUID(uint16(field[0]) + (uint16(field[1]) << 8)),
-				Data: field[2:],
-			})
-		case 0x20: // 32-bit uuid
-			if len(field) < 4 {
-				continue
-			}
-			serviceData = append(serviceData, ServiceDataElement{
-				UUID: New32BitUUID(uint32(field[0]) + (uint32(field[1]) << 8) + (uint32(field[2]) << 16) + (uint32(field[3]) << 24)),
-				Data: field[4:],
-			})
-		case 0x21: // 128-bit uuid
-			if len(field) < 16 {
-				continue
-			}
-			var uuidArray [16]byte
-			copy(uuidArray[:], field[:16])
-			serviceData = append(serviceData, ServiceDataElement{
-				UUID: NewUUID(uuidArray),
-				Data: field[16:],
-			})
+		if element, ok := parseServiceData(fieldType, field); ok {
+			serviceData = append(serviceData, element)
 		}
 	}
 	return serviceData
+}
+
+// parseServiceData returns the service data in an advertising data field of
+// the given type, or false if the field holds no service data.
+func parseServiceData(fieldType byte, field []byte) (ServiceDataElement, bool) {
+	switch fieldType {
+	case 0x16: // 16-bit uuid
+		if len(field) < 2 {
+			return ServiceDataElement{}, false
+		}
+		return ServiceDataElement{
+			UUID: New16BitUUID(uint16(field[0]) + (uint16(field[1]) << 8)),
+			Data: field[2:],
+		}, true
+	case 0x20: // 32-bit uuid
+		if len(field) < 4 {
+			return ServiceDataElement{}, false
+		}
+		return ServiceDataElement{
+			UUID: New32BitUUID(uint32(field[0]) + (uint32(field[1]) << 8) + (uint32(field[2]) << 16) + (uint32(field[3]) << 24)),
+			Data: field[4:],
+		}, true
+	case 0x21: // 128-bit uuid
+		if len(field) < 16 {
+			return ServiceDataElement{}, false
+		}
+		var uuidArray [16]byte
+		copy(uuidArray[:], field[:16])
+		return ServiceDataElement{
+			UUID: NewUUID(uuidArray),
+			Data: field[16:],
+		}, true
+	}
+	return ServiceDataElement{}, false
 }
 
 // reset restores this buffer to the original state.
