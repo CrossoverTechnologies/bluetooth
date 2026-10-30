@@ -290,10 +290,74 @@ func getScanResultFromArgs(args *advertisement.BluetoothLEAdvertisementReceivedE
 			LocalName:        localName,
 			ServiceUUIDs:     serviceUUIDs,
 			ManufacturerData: manufacturerData,
+			ServiceData:      advertisementServiceData(winAdv),
 		},
 	}
 
 	return result
+}
+
+func advertisementServiceData(adv *advertisement.BluetoothLEAdvertisement) []ServiceDataElement {
+	sections, _ := adv.GetDataSections()
+	if sections == nil {
+		return nil
+	}
+	defer sections.Release()
+	var serviceData []ServiceDataElement
+	size, _ := sections.GetSize()
+	for i := uint32(0); i < size; i++ {
+		element, err := sections.GetAt(i)
+		if err != nil {
+			continue
+		}
+		section := (*advertisement.BluetoothLEAdvertisementDataSection)(element)
+		dataType, data, err := readDataSection(section)
+		section.Release()
+		if err != nil {
+			continue
+		}
+		if e, ok := parseServiceData(dataType, data); ok {
+			serviceData = append(serviceData, e)
+		}
+	}
+	return serviceData
+}
+
+// dataSectionVtbl has the layout of iBluetoothLEAdvertisementDataSectionVtbl. winrt-go has no Data getter and its DataType getter panics if QueryInterface fails.
+// See https://github.com/saltosystems/winrt-go/blob/8ef619c103a3/windows/devices/bluetooth/advertisement/bluetoothleadvertisementdatasection.go
+type dataSectionVtbl struct {
+	ole.IInspectableVtbl
+
+	GetDataType uintptr
+	SetDataType uintptr
+	GetData     uintptr
+	SetData     uintptr
+}
+
+func readDataSection(section *advertisement.BluetoothLEAdvertisementDataSection) (uint8, []byte, error) {
+	itf, err := section.QueryInterface(ole.NewGUID(advertisement.GUIDiBluetoothLEAdvertisementDataSection))
+	if err != nil {
+		return 0, nil, err
+	}
+	defer itf.Release()
+	vtbl := (*dataSectionVtbl)(unsafe.Pointer(itf.RawVTable))
+
+	var dataType uint8
+	hr, _, _ := syscall.SyscallN(vtbl.GetDataType, uintptr(unsafe.Pointer(itf)), uintptr(unsafe.Pointer(&dataType)))
+	if hr != 0 {
+		return 0, nil, ole.NewError(hr)
+	}
+
+	var buffer *streams.IBuffer
+	hr, _, _ = syscall.SyscallN(vtbl.GetData, uintptr(unsafe.Pointer(itf)), uintptr(unsafe.Pointer(&buffer)))
+	if hr != 0 {
+		return 0, nil, ole.NewError(hr)
+	}
+	if buffer == nil {
+		return dataType, nil, nil
+	}
+	defer buffer.Release()
+	return dataType, bufferToSlice(buffer), nil
 }
 
 // scanCacheSize limits how many devices a scan keeps fields for.
