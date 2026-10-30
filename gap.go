@@ -437,7 +437,7 @@ func parseServiceData(fieldType byte, field []byte) (ServiceDataElement, bool) {
 		var uuidArray [16]byte
 		copy(uuidArray[:], field[:16])
 		return ServiceDataElement{
-			UUID: NewUUID(uuidArray),
+			UUID: UUIDFromBytes(uuidArray),
 			Data: field[16:],
 		}, true
 	}
